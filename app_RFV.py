@@ -2,10 +2,14 @@
 import pandas            as pd
 import streamlit         as st # type: ignore
 import numpy             as np
+import matplotlib.pyplot as plt
+import seaborn           as sns # type: ignore
+from io                  import BytesIO
+from sklearn.cluster     import KMeans # type: ignore
+from sklearn.preprocessing import StandardScaler # type: ignore
 
 from datetime            import datetime
 from PIL                 import Image
-from io                  import BytesIO
 
 @st.cache_data
 def convert_df(df):
@@ -168,6 +172,45 @@ def main():
 
         st.write('Quantidade de clientes por tipo de ação')
         st.write(df_RFV['acoes de marketing/crm'].value_counts(dropna=False))
+
+        st.markdown("---")
+        st.write('## Análise de Segmentação com K-Means')
+
+        # Normalização dos dados para o K-Means
+        scaler = StandardScaler()
+        df_scaled = scaler.fit_transform(df_RFV[['Recencia', 'Frequencia', 'Valor']])
+        
+        # Determinação do número ideal de clusters usando o método do cotovelo
+        inertia = []
+        K_range = range(1, 11)
+        for k in K_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            kmeans.fit(df_scaled)
+            inertia.append(kmeans.inertia_)
+        
+        fig, ax = plt.subplots()
+        ax.plot(K_range, inertia, marker='o')
+        ax.set_xlabel('Número de Clusters')
+        ax.set_ylabel('Inércia')
+        ax.set_title('Método do Cotovelo')
+        st.pyplot(fig)
+        
+        # Aplicação do K-Means com um número de clusters definido (exemplo: 4)
+        n_clusters = st.sidebar.slider('Escolha o número de clusters:', 2, 10, 4)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        df_RFV['Cluster'] = kmeans.fit_predict(df_scaled)
+        
+        st.write('## Segmentação de Clientes com K-Means')
+        st.write(df_RFV.head())
+        
+        # Visualização dos clusters
+        fig, ax = plt.subplots()
+        sns.scatterplot(x=df_RFV['Recencia'], y=df_RFV['Valor'], hue=df_RFV['Cluster'], palette='viridis', ax=ax)
+        ax.set_title('Clusters - Recência vs Valor')
+        st.pyplot(fig)
+        
+        df_xlsx = to_excel(df_RFV)
+        st.download_button(label='📥 Download', data=df_xlsx, file_name='Segmentacao_KMeans.xlsx')
 
 if __name__ == '__main__':
     main()
